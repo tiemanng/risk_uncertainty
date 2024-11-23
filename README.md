@@ -1,0 +1,6 @@
+Vote Choice under Certainty, Risk, and Uncertainty
+
+Abstract
+Voters are thought to be repelled by unclear party communication or all-out uncertainty about their ideological or programmatic positions. Our contribution builds on a series of survey experiments in the alternative states of certainty, risk, and uncertainty. Choice under risk occurs, for instance, when electoral platforms transmit blurred or unclear signals. However, the range of potential positions and their respective probabilities is considered common, exogenous knowledge: we find that these scenarios neither attract nor repel voters. In contrast, choice under uncertainty is given when potential outcomes or their respective probabilities are unknown to the voters and require endogenous cognitive abilities and endogenous signal processing: we demonstrate that choice under uncertainty tends to drive away voters. The experimental setup considers both spatial and non-spatial components of voter utility and their contextual conditions to bolster external validity and arrive at more internally and externally valid assessments of vote choice under various ``states of nature''.
+
+Please execute the NB_EXP.Rmd to replicate the results.
