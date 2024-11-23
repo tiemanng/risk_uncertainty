@@ -30,13 +30,13 @@ theme_set(theme_bw())
 ################################################################################
 # load (recoded) data ;
 rm(list=ls())
-exp_i   <- read.csv("../_SOURCE/REC_RESP_NOL.csv", header=TRUE)
-exp_ij  <- read.csv("../_SOURCE/REC_EXP_NOL_ij.csv", header=TRUE)
-exp_ij_ <- read.csv("../_SOURCE/REC_EXP_ij.csv", header=TRUE)
+exp_i   <- read.csv("REC_RESP_NOL.csv", header=TRUE)
+exp_ij  <- read.csv("REC_EXP_NOL_ij.csv", header=TRUE)
+exp_ij_ <- read.csv("REC_EXP_ij.csv", header=TRUE)
 
 # within-perspective ;
-exp_risk<- read.csv("../_SOURCE/REC_EXP_RISK_ij.csv", header=TRUE)
-exp_ra  <- read.csv("../_SOURCE/REC_EXP_RA_ij.csv", header=TRUE)
+exp_risk<- read.csv("REC_EXP_RISK_ij.csv", header=TRUE)
+exp_ra  <- read.csv("REC_EXP_RA_ij.csv", header=TRUE)
 
 ################################################################################
 # split into experiments 1-5 ;
