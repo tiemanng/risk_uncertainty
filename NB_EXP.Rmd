@@ -1,0 +1,531 @@
+# GT; 18/07/2024;
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+################################################################################
+##### Some preliminaries ;
+
+```{r}
+library(ggcorrplot)
+library(ggeffects)
+library(ggExtra)
+library(ggpubr)
+library(ggridges)
+library(ggthemes)
+library(lme4)
+library(mlogit)
+library(qwraps2)
+library(sjPlot)
+library(support.CEs)
+library(survival)
+library(texreg)
+library(tidyverse)
+
+# options ggplot2 ;
+theme_set(theme_bw())
+
+################################################################################
+# load (recoded) data ;
+rm(list=ls())
+exp_i   <- read.csv("../_SOURCE/REC_RESP_NOL.csv", header=TRUE)
+exp_ij  <- read.csv("../_SOURCE/REC_EXP_NOL_ij.csv", header=TRUE)
+exp_ij_ <- read.csv("../_SOURCE/REC_EXP_ij.csv", header=TRUE)
+
+# within-perspective ;
+exp_risk<- read.csv("../_SOURCE/REC_EXP_RISK_ij.csv", header=TRUE)
+exp_ra  <- read.csv("../_SOURCE/REC_EXP_RA_ij.csv", header=TRUE)
+
+################################################################################
+# split into experiments 1-5 ;
+exp_1   <- filter(exp_ij, exp==1) 
+exp_2   <- filter(exp_ij, exp==2) 
+exp_3   <- filter(exp_ij, exp==3) 
+exp_4   <- filter(exp_ij, exp==4) 
+exp_5   <- filter(exp_ij, exp==5) 
+
+# split experiment 5 into vignettes 1-4 ;
+exp_5_1 <- filter(exp_5, vignette==1)
+exp_5_2 <- filter(exp_5, vignette==2)
+exp_5_3 <- filter(exp_5, vignette==3)
+exp_5_4 <- filter(exp_5, vignette==4)
+```
+
+
+################################################################################
+##### EXPERIMENT 1 (TWO PRECISE PARTIES)
+```{r}
+# EXP1: vote shares of p_A (0) and p_B(1) ;
+table(exp_1$vote)
+prop.table(table(exp_1$vote))
+```
+
+```{r}
+# EXP1: share of spatial voters ;
+table(exp_1$vote_spa)
+prop.table(table(exp_1$vote_spa))
+t.test(exp_1$vote_spa, mu=.5)
+```
+
+```{r}
+# EXP1: bivariate model ;
+m1  <- glm(vote ~ ut_B_A, data=exp_1, family = binomial(link = "logit"))
+summary(m1)
+gofm(m1)
+```
+
+```{r}
+m1_sq  <- glm(vote ~ ut_B_A_sq, data=exp_1, family = binomial(link = "logit"))
+summary(m1_sq)
+gofm(m1_sq)
+```
+```{r}
+# CORRECT ;
+ta <- prop.table(table(true=exp_1$vote, pred = round(fitted(m1))))
+correct <- ta[1,1] + ta[2,2]
+ta 
+correct
+```
+
+```{r}
+# EXP1: marginal effects ; 
+ggpredict(m1, "ut_B_A") %>% 
+  plot(ci.style="ribbon", add.data=TRUE, jitter=0.02) + 
+  xlab(expression(paste("utility difference ",u(v,p[B]),'-',u(v,p[A])))) + 
+  ylab("vote probability [Pr(v=B)]") +
+  ggtitle("") + theme_bw()
+```
+################################################################################
+##### EXPERIMENT 2 (A Precise and a Risky Party)
+```{r}
+# EXP2: vote shares of p(0) and p'_B' (1) ;
+table(exp_2$vote_unc)
+prop.table(table(exp_2$vote_unc))
+t.test(exp_2$vote_unc, mu=.5)
+```
+
+```{r}
+# EXP2: share of spatial voters ;
+table(exp_2$vote_spa)
+prop.table(table(exp_2$vote_spa))
+t.test(exp_2$vote_spa, mu=.5)
+```
+```{r}
+# EXP2: comparing E1 and E2; only identical positions ;
+table(exp_2$switch_1_2)
+prop.table(table(exp_2$switch_1_2))
+t.test(exp_2$switch_1_2, mu=.5)
+t.test(ifelse(exp_2$switch_1_2==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP2: bivariate model with p and p' ;
+m2 <- glm(vote_unc ~ ut_unc_cer, data=exp_2, family = binomial(link = "logit"))
+summary(m2)
+gofm(m2)
+```
+
+```{r}
+# EXP2: bivariate model with p and p' (squared);
+m2_sq <- glm(vote_unc ~ ut_unc_cer_sq, data=exp_2, family = binomial(link = "logit"))
+summary(m2_sq)
+gofm(m2_sq)
+```
+
+
+```{r}
+# EXP2: marginal effects  ;
+ggpredict(m2, "ut_unc_cer") %>% 
+  plot(ci.style="ribbon", add.data=TRUE, jitter=0.02) + 
+  xlab("utility difference u(c[p'])-u(p)") + 
+  ylab("vote probability [Pr(v=p')]") +
+  ggtitle("") + theme_bw()
+
+ggsave("../LaTeX/_fig_m2.pdf", plot=last_plot(), width = 12, height = 12, units = "cm")
+```
+
+```{r}
+# EXP2: multivariate model (with interaction) ;
+m2_pl  <- glm(vote_unc ~ ut_unc_cer, 
+              data=exp_2, family = binomial(link = "logit"))
+m2_add <- glm(vote_unc ~ ut_unc_cer + (lr_i_unc + risk + education), 
+              data=exp_2, family = binomial(link = "logit"))
+m2_int <- glm(vote_unc ~ ut_unc_cer * (lr_i_unc + risk + education), 
+              data=exp_2, family = binomial(link = "logit"))
+
+screenreg(list(m2_pl, m2_add, m2_int), digits=3, dcolumn = TRUE, booktabs = TRUE, 
+       include.bic=FALSE, use.packages = FALSE, single.row=TRUE, caption.above=TRUE, 
+       label = "TAB_MODELS", 
+       caption = "Determinants of Choice Under Risk", 
+       custom.coef.names = c("Intercept", "$u(p')-u(p)$", "uncertainty", "risk", "education", "$[u(p')-u(p)]$ * uncertainty", "$[u(p')-u(p)]$ * risk", "$[u(p')-u(p)]$ * education"),
+       custom.model.names=c("Model 1 (bi-variate)", "Model 2 (additive)", "Model 3 (interactive)"),
+       custom.note="Notes: Coefficients are obtained from a series of bi- and multivariate logit models based on E2.") 
+```
+
+```{r}
+# EXP2: multivariate model (with interaction, squared) ;
+m2_pl_sq  <- glm(vote_unc ~ ut_unc_cer, 
+              data=exp_2, family = binomial(link = "logit"))
+m2_add_sq <- glm(vote_unc ~ ut_unc_cer + (lr_i_unc + risk + education), 
+              data=exp_2, family = binomial(link = "logit"))
+m2_int_sq <- glm(vote_unc ~ ut_unc_cer * (lr_i_unc + risk + education), 
+              data=exp_2, family = binomial(link = "logit"))
+
+screenreg(list(m2_pl_sq, m2_add_sq, m2_int_sq), digits=3, dcolumn = TRUE, booktabs = TRUE, include.bic=FALSE, use.packages = FALSE, single.row=TRUE, caption.above=TRUE, 
+       label = "TAB_MODELS", 
+       caption = "Determinants of Choice Under Risk", 
+       custom.coef.names = c("Intercept", "$u(p')-u(p)$", "uncertainty", "risk", "education", "$[u(p')-u(p)]$ * uncertainty", "$[u(p')-u(p)]$ * risk", "$[u(p')-u(p)]$ * education"),
+       custom.model.names=c("Model 1 (bi-variate)", "Model 2 (additive)", "Model 3 (interactive)"),
+       custom.note="Notes: Coefficients are obtained from a series of bi- and multivariate logit models based on E2.") 
+```
+
+```{r}
+# EXP2: interaction with lr_i_unc ;
+fig_m2_unc <- ggpredict(m2_int, c("ut_unc_cer", "lr_i_unc")) %>% 
+  plot(colors="bw", add.data=TRUE, jitter=0.02) + 
+  xlab("u(c[p'])-u(p)") + 
+  ylab("vote probability [Pr(v=p')]") +
+  ggtitle("Uncertainty") +
+  theme(legend.position="bottom", legend.title=element_blank())
+fig_m2_unc
+```
+
+```{r}
+# EXP2: interaction with risk ;
+fig_m2_risk <- ggpredict(m2_int, c("ut_unc_cer", "risk")) %>% 
+  plot(colors="bw", add.data=TRUE, jitter=0.02) + 
+  xlab("u(c[p'])-u(p)") +  
+  ylab("") +
+  ggtitle("Risk") + 
+  theme(legend.position="bottom", legend.title=element_blank())
+fig_m2_risk
+```
+
+```{r}
+# EXP2: interaction with education ;
+fig_m2_educ <- ggpredict(m2_int, c("ut_unc_cer", "education")) %>% 
+  plot(colors="bw", add.data=TRUE, jitter=0.02) + 
+  xlab("u(c[p'])-u(p)") +  
+  ylab("") +
+  ggtitle("Education") + 
+  theme(legend.position="bottom", legend.title=element_blank())
+fig_m2_educ
+```
+
+```{r}
+# EXP2: combined marginal effects plots ;
+ggarrange(fig_m2_unc, fig_m2_risk, fig_m2_educ, nrow=1)
+
+ggsave("../LaTeX/_fig_models.pdf", plot=last_plot(), width = 24, height = 10, units = "cm")
+
+```
+
+################################################################################
+##### EXPERIMENT 3 Straddle Tie
+
+```{r}
+# EXP3: vote shares of p(0) and p'(1) ;
+table(exp_3$vote_unc)
+prop.table(table(exp_3$vote_unc))
+t.test(exp_3$vote_unc, mu=.5)
+```
+
+```{r}
+# EXP3: vote shares in cases of complete overlap (v_i=p_A=p_B) ;
+table(exp_3[exp_3$lr_i==exp_3$lr_A,]$vote)
+prop.table(table(exp_3[exp_3$lr_i==exp_3$lr_A,]$vote))
+t.test(exp_3[exp_3$lr_i==exp_3$lr_A,]$vote, mu=.5)
+```
+
+################################################################################
+##### EXPERIMENT 4 REFLECTED TIE ;
+
+```{r}
+# EXP4: vote shares of p(0) and p' (1) ;
+table(exp_4$vote_unc)
+prop.table(table(exp_4$vote_unc))
+t.test(exp_4$vote_unc, mu=.5)
+```
+
+################################################################################
+##### EXPERIMENT 5 (PRECISE, RISKY, AND UNCERTAIN CHOICES)
+
+# vignette 1 ("B=precise")
+```{r}
+# EXP51: vote shares of p_A (0) and p_B (1) ;
+table(exp_5_1$vote)
+prop.table(table(exp_5_1$vote))
+t.test(exp_5_1$vote, mu=.5)
+t.test(ifelse(exp_5_1$vote==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP51: bivariate model ;
+m51 <- glm(vote ~ ut_B_A, family = binomial(link = "logit"), data=exp_5_1)
+summary(m51)
+gofm(m51)
+```
+
+```{r}
+# EXP51: bivariate model (squared) ;
+m51_sq <- glm(vote ~ ut_B_A_sq, family = binomial(link = "logit"), data=exp_5_1)
+summary(m51_sq)
+gofm(m51_sq)
+```
+
+################################################################################
+# vignette 2 ("B=risky")
+```{r}
+# EXP52: vote shares of p_A(0) and p_B(1) ;
+table(exp_5_2$vote)
+prop.table(table(exp_5_2$vote))
+t.test(exp_5_2$vote, mu=.5)
+t.test(ifelse(exp_5_2$vote==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP52: vote shares of p(0) and p'(1)
+table(exp_5_2$vote_unc)
+prop.table(table(exp_5_2$vote_unc))
+t.test(exp_5_2$vote_unc, mu=.5)
+t.test(ifelse(exp_5_2$vote_unc==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP52: bivariate model ;
+m52 <- glm(vote_unc ~ ut_unc_cer, family = binomial(link = "logit"), data=exp_5_2)
+summary(m52)
+gofm(m52)
+```
+
+```{r}
+# EXP52: bivariate (squared) ;
+m52_sq <- glm(vote_unc ~ ut_unc_cer_sq, family = binomial(link = "logit"), data=exp_5_2)
+summary(m52_sq)
+gofm(m52_sq)
+```
+
+```{r}
+# EXP52: multivariate model with interaction ;
+m52_int <- glm(vote_unc ~ ut_unc_cer * (lr_i_unc + risk + education), 
+               family = binomial(link = "logit"), data=exp_5_2)
+summary(m52_int)
+gofm(m52_int)
+```
+
+```{r}
+# EXP52: multivariate model with interaction (squared);
+m52_int_sq <- glm(vote_unc ~ ut_unc_cer_sq * (lr_i_unc + risk + education), 
+               family = binomial(link = "logit"), data=exp_5_2)
+summary(m52_int_sq)
+gofm(m52_int_sq)
+```
+
+
+################################################################################
+# vignette 3 ("B=non-position")
+```{r}
+# EXP53: vote shares of p_A(0) and p_B(1) ;
+table(exp_5_3$vote)
+prop.table(table(exp_5_3$vote))
+t.test(exp_5_3$vote, mu=.5)
+t.test(ifelse(exp_5_3$vote==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP53: vote shares of p(0) and p'(1)
+table(exp_5_3$vote_unc)
+prop.table(table(exp_5_3$vote_unc))
+t.test(exp_5_3$vote_unc, mu=.5)
+t.test(ifelse(exp_5_3$vote_unc==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP53: bivariate model ;
+m53 <- glm(vote_unc ~ ut_unc_cer, family = binomial(link = "logit"), data=exp_5_3)
+summary(m53)
+gofm(m53)
+```
+
+```{r}
+# EXP53: bivariate model (squared);
+m53_sq <- glm(vote_unc ~ ut_unc_cer_sq, family = binomial(link = "logit"), data=exp_5_3)
+summary(m53_sq)
+gofm(m53_sq)
+```
+
+```{r}
+# EXP53: multivariate model with interaction ;
+m53_int <- glm(vote_unc ~ ut_unc_cer * (lr_i_unc + risk + education), 
+               family = binomial(link = "logit"), data=exp_5_3)
+summary(m53_int)
+gofm(m53_int)
+```
+
+################################################################################
+# vignette 4 ("B=internal conflict")
+
+```{r}
+# EXP54: vote shares of p_A(0) and p_B(1) ;
+table(exp_5_4$vote)
+prop.table(table(exp_5_4$vote))
+t.test(exp_5_4$vote, mu=.5)
+t.test(ifelse(exp_5_4$vote==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP54: vote shares of p(0) and p'(1) ;
+table(exp_5_4$vote_unc)
+prop.table(table(exp_5_4$vote_unc))
+t.test(exp_5_4$vote_unc, mu=.5)
+t.test(ifelse(exp_5_4$vote_unc==0,1,0), mu=.5)
+```
+
+```{r}
+# EXP54: bivariate model ;
+m54 <- glm(vote_unc ~ ut_unc_cer, family = binomial(link = "logit"), data=exp_5_4)
+summary(m54)
+gofm(m54)
+```
+
+```{r}
+# EXP54: bivariate model (squared);
+m54_sq <- glm(vote_unc ~ ut_unc_cer_sq, family = binomial(link = "logit"), data=exp_5_4)
+summary(m54_sq)
+gofm(m54_sq)
+```
+
+```{r}
+# EXP54: multivariate model with interaction ;
+m54_int <- glm(vote_unc ~ ut_unc_cer * (lr_i_unc + risk + education), 
+               family = binomial(link = "logit"), data=exp_5_3)
+summary(m54_int)
+gofm(m54_int)
+```
+
+```{r}
+# EXP54: multivariate model with interaction (squared);
+m54_int_sq <- glm(vote_unc ~ ut_unc_cer_sq * (lr_i_unc + risk + education), 
+               family = binomial(link = "logit"), data=exp_5_3)
+summary(m54_int_sq)
+gofm(m54_int_sq)
+```
+```{r}
+# EXP5: compare the four groups;
+
+# no difference between choice under certainty and risk ;
+t.test(exp_5_1$vote, exp_5_2$vote, mu=0)
+
+# no difference between the choice-under-uncertainty scenarios ;
+t.test(exp_5_3$vote, exp_5_4$vote, mu=0)
+
+# differences between (1) choice under certainty or risk and (2) uncertainty
+
+t.test(exp_5_1$vote, exp_5_3$vote, mu=0)
+t.test(exp_5_1$vote, exp_5_4$vote, mu=0)
+
+t.test(exp_5_2$vote, exp_5_3$vote, mu=0)
+t.test(exp_5_2$vote, exp_5_4$vote, mu=0)
+
+# joint test via logistic regression
+m5 <- glm(vote ~ factor(vignette), data= exp_5, family=binomial(link = "logit"))
+summary(m5)
+confint(m5)
+
+```
+
+```{r}
+screenreg(list(m1,m2,m51,m52,m53,m54), digits=3, dcolumn = TRUE, booktabs = TRUE, 
+       include.bic=FALSE, use.packages = FALSE, single.row=FALSE, caption.above=TRUE, 
+       fontsize="footnotesize", label = "TAB_APP_BI", 
+       caption = "Discriminating Risk and Uncertainty (Abs. Distances)", 
+       custom.coef.names = c("Intercept", "$u(p_B)-u(p_A)$","$u(p')-u(p)$"),
+       custom.model.names=c("E1","E2","E5:1","E5:2","E5:3","E5:4"),
+       custom.note="Notes: Coefficients are obtained from multilevel logit models based upon the forced-choice experiments E2-5.") 
+```
+
+```{r}
+screenreg(list(m1_sq,m2_sq,m51_sq,m52_sq,m53_sq,m54_sq), digits=3, dcolumn = TRUE, 
+      booktabs = TRUE, include.bic=FALSE, use.packages = FALSE, single.row=FALSE, 
+      caption.above=TRUE, fontsize="footnotesize", label = "TAB_APP_BI_SQ", 
+       caption = "Discriminating Risk and Ambiguity (Squared Distances)", 
+       custom.coef.names = c("Intercept", "$u_{\text{sq}}(p_B)-u_{\text{sq}}(p_A)$","$u(p')-u(p)$"),
+       custom.model.names=c("E1","E2","E5:1","E5:2","E5:3","E5:4"),
+       custom.note="Notes: Coefficients are obtained multilevel logit models based on E2-5.") 
+```
+
+
+################################################################################
+##### VOTING UNDER RISK VS AMBIGUITY ; 
+
+# pooled models ;
+
+```{r}
+# EXP2-5: additive model ;
+pooled_ra_1 <- glm(vote_unc ~ ut_unc_cer + amb, data=exp_ra,
+                  family = binomial(link = "logit"))
+summary(pooled_ra_1)
+gofm(pooled_ra_1)
+```
+
+```{r}
+# EXP2-5: interactive model  ;
+pooled_ra_2 <- glm(vote_unc ~ ut_unc_cer * amb, data=exp_ra,
+                  family = binomial(link = "logit"))
+summary(pooled_ra_2)
+```
+
+
+# partially pooled models ;
+
+```{r}
+# EXP2-5: additive model  ;
+ppooled_ra_1 <- glmer(vote_unc ~ ut_unc_cer + amb + (1|i), data=exp_ra,
+                  family = binomial(link = "logit"))
+summary(ppooled_ra_1)
+```
+
+
+```{r}
+# EXP2-5: interactive model  ;
+ppooled_ra_2 <- glmer(vote_unc ~ ut_unc_cer * amb + (1|i), data=exp_ra,
+                  family = binomial(link = "logit"))
+summary(ppooled_ra_2)
+```
+
+```{r}
+screenreg(list(ppooled_ra_2), digits=3, dcolumn = TRUE, booktabs = TRUE, include.bic=FALSE, use.packages = FALSE, single.row=TRUE, caption.above=TRUE, 
+       label = "TAB_PARTIAL", 
+       caption = "Discriminating Risk and Ambiguity", 
+       custom.coef.names = c("Intercept", "$u(p')-u(p)$", "ambiguity", "$[u(p')-u(p)]$ * ambiguity"),
+       custom.model.names=c("Model 1"),
+       custom.note="Notes: Coefficients are obtained from multilevel logit models based on E2-5.") 
+```
+
+```{r}
+screenreg(list(pooled_ra_1, pooled_ra_2, ppooled_ra_1, ppooled_ra_2), digits=3, dcolumn = TRUE, booktabs = TRUE, include.bic=FALSE, use.packages = FALSE, single.row=FALSE, caption.above=TRUE, fontsize="footnotesize",
+       label = "TAB_APP_RA", 
+       caption = "Discriminating Risk and Ambiguity", 
+       custom.coef.names = c("Intercept", "$u(p')-u(p)$", "ambiguity", "$[u(p')-u(p)]$ * ambiguity"),
+       custom.model.names=c("pooled, add.", "pooled, int.", "multi., add.", "multi., int" ),
+       custom.note="Notes: Coefficients are obtained from pooled and multilevel logit models based upon the forced-choice experiments E2-5.") 
+```
+
+```{r}
+# EXP2-5: marginal effects plot ;
+amb0 <- as.numeric(predict(pooled_ra_2, type="response", newdata=data.frame(ut_unc_cer=c(0,0), amb = c(0,1)))[1])
+amb1 <- as.numeric(predict(pooled_ra_2, type="response", newdata=data.frame(ut_unc_cer=c(0,0), amb = c(0,1)))[2])
+
+ggpredict(pooled_ra_1, c("ut_unc_cer", "amb")) %>% 
+  plot(color="bw", add.data=TRUE, jitter=0.02) + 
+  geom_segment(aes(x = 0, y = amb0, xend = 0, yend = amb1), linewidth=2) +
+  geom_segment(aes(x = 0, y = amb0, xend = -8, yend = amb0), linetype="dotted") +
+  geom_segment(aes(x = 0, y = amb1, xend = -8, yend = amb1), linetype="dotted") +
+  xlab("utility difference u(c[p'])-u(p)") + 
+  ylab("vote probability [Pr(v=p')]") +
+  ggtitle("") + theme_bw() + theme(legend.position="bottom", legend.title=element_blank())
+
+ggsave("../LaTeX/_fig_partial.pdf", plot=last_plot(), width = 12, height = 12, units = "cm")
+```
